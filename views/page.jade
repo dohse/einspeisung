@@ -1,0 +1,17 @@
+!!! 5
+html
+  form(method="get", action="/")
+    p
+      | feed-url
+      input(name="feed",type="text", size="80", value=feed)
+    p
+      | css-selector
+      input(name="path", type="text", size="30", value=path)
+    p
+      | css-selector ignore
+      input(name="ignore", type="text", size="60", value=ignore)
+    p
+      | css-selector pagination
+      input(name="pagination", type="text", size="30",value=pagination)
+    p
+      input(type="submit")

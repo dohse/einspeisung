@@ -65,6 +65,9 @@ fetchUrlWithCache = (url, tag, cb) -> waterfall [
         puts "GET #{url}"
         fetchUrl url, cb
     (url_red, content, cb) ->
+        if content.length == 0
+            cb "Received empty content"
+            return
         db.execute 'INSERT INTO content (url, cache_tag, content) VALUES (?, ?, ?)', [url_red, tag, content], (err) ->
             cb err, url_red, content
     (url_red, content) ->
@@ -105,6 +108,10 @@ class AtomItem
             @node.addChild new libxmljs.Element @node.doc(), "summary", type: "html", text
 
 server.get '/', (req, res, next) ->
+    if req.query.page
+        res.partial 'page.jade', req.query
+        return
+
     res.header("Content-Type", "application/xhtml+xml")
     doc = null
     waterfall [
@@ -114,7 +121,7 @@ server.get '/', (req, res, next) ->
             dom.get('/*').attr 'xml:base': url.replace /[^\/]*$/, ""
             if dom.get '/rss'
                 doc = new RssFeed dom
-            else if r = dom.get '/a:feed', nsAtom
+            else if dom.get '/a:feed', nsAtom
                 doc = new AtomFeed dom
 
             items = doc.items()
