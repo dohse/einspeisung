@@ -71,19 +71,25 @@ fetchUrlWithCache = (url, cb) -> waterfall [
 
 class RssFeed
     constructor: (@dom) ->
-    getItems: -> @dom.find '//item', {}
-    getUrl: (node) -> node.get('link').text()
-    setText: (node, text) -> node.get('description')?.text text
+    items: -> new RssItem node for node in @dom.find '//item', {}
+
+class RssItem
+    constructor: (@node) ->
+        @url = node.get('link').text()
+    text: (text) -> @node.get('description')?.text text
 
 nsAtom = a: 'http://www.w3.org/2005/Atom'
 class AtomFeed
     constructor: (@dom) ->
-    getItems: -> @dom.find '//a:entry', nsAtom
-    getUrl: (node) -> node.get('a:link', nsAtom).attr('href').value()
-    setText: (node, text) -> if summary = node.get 'summary'
+    items: -> new AtomItem node for node in @dom.find '//a:entry', nsAtom
+
+class AtomItem
+    constructor: (@node) ->
+        @url = node.get('a:link', nsAtom).attr('href').value()
+    text: (text) -> if summary = @node.get 'summary'
             summary.text text
         else
-            node.addChild new libxmljs.Element node.doc(), "summary", type: "html", text
+            @node.addChild new libxmljs.Element @node.doc(), "summary", type: "html", text
 
 server.get '/', (req, res, next) ->
     res.header("Content-Type", "application/xhtml+xml")
@@ -98,11 +104,7 @@ server.get '/', (req, res, next) ->
             else if r = dom.get '/a:feed', nsAtom
                 doc = new AtomFeed dom
 
-            items = for node in doc.getItems()
-                {
-                    url: doc.getUrl node
-                    node
-                }
+            items = doc.items()
             map items, (item, cb) ->
                 fetchUrlWithCache item.url, (err, redirect, content) ->
                     item.redirect = redirect
@@ -144,7 +146,7 @@ server.get '/', (req, res, next) ->
                     if req.query.ignore
                         wanted.find(req.query.ignore).remove()
                     wanted.html()
-                doc.setText item.node, elements.join(' ').replace /[<>&]/g, (char) -> switch char
+                item.text elements.join(' ').replace /[<>&]/g, (char) -> switch char
                     when "<" then "&lt;"
                     when ">" then "&gt;"
                     when "&" then "&amp;"
