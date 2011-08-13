@@ -1,29 +1,20 @@
 #!/usr/bin/env coffee
 
+async = {waterfall, map} = require 'async'
 express = require 'express'
-
-{waterfall, map} = require 'async'
-{Database} = require 'sqlite'
+get = require 'get'
+http = require 'http'
+iconv = {Iconv} = require 'iconv'
+jquery = require 'jquery'
+libxmljs = require 'libxmljs'
+sqlite = {Database} = require 'sqlite'
+sys = {puts} = require 'sys'
+underscore = _ = require 'underscore'
+url = {parse} = require 'url'
+util = {inspect} = require 'util'
 
 db = new Database()
-
 server = express.createServer()
-
-http = require 'http'
-{parse} = require 'url'
-
-libxmljs = require 'libxmljs'
-
-jquery = require 'jquery'
-
-{puts} = require 'sys'
-{inspect} = require 'util'
-
-get = require 'get'
-
-_ = require 'underscore'
-
-{Iconv} = require 'iconv'
 
 concatBuffer = (buffers) ->
     len = 0
