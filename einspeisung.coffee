@@ -69,6 +69,11 @@ fetchUrlWithCache = (url, cb) -> waterfall [
             cb null, url_red, content
     ], cb
 
+escapeHtml = (html) -> html.replace /[<>&]/g, (char) -> switch char
+                    when "<" then "&lt;"
+                    when ">" then "&gt;"
+                    when "&" then "&amp;"
+
 class RssFeed
     constructor: (@dom) ->
     items: -> new RssItem node for node in @dom.find '//item', {}
@@ -146,10 +151,7 @@ server.get '/', (req, res, next) ->
                     if req.query.ignore
                         wanted.find(req.query.ignore).remove()
                     wanted.html()
-                item.text elements.join(' ').replace /[<>&]/g, (char) -> switch char
-                    when "<" then "&lt;"
-                    when ">" then "&gt;"
-                    when "&" then "&amp;"
+                item.text escapeHtml elements.join ' '
             res.send doc.dom.toString()
     ], (err) -> if err
         res.send inspect err
