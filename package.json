@@ -9,6 +9,7 @@
         "libxmljs": "~0.4",
         "sqlite": "~1.0",
         "underscore": "~1.1",
-        "get": "~0.4"
+        "get": "~0.4",
+        "jade": "~0.14"
     }
 }
