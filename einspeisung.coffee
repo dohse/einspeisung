@@ -69,34 +69,39 @@ fetchUrlWithCache = (url, cb) -> waterfall [
             cb null, url_red, content
     ], cb
 
+class RssFeed
+    constructor: (@dom) ->
+    getItems: -> @dom.find '//item', {}
+    getUrl: (node) -> node.get('link').text()
+    setText: (node, text) -> node.get('description')?.text text
+
+nsAtom = a: 'http://www.w3.org/2005/Atom'
+class AtomFeed
+    constructor: (@dom) ->
+    getItems: -> @dom.find '//a:entry', nsAtom
+    getUrl: (node) -> node.get('a:link', nsAtom).attr('href').value()
+    setText: (node, text) -> if summary = node.get 'summary'
+            summary.text text
+        else
+            node.addChild new libxmljs.Element node.doc(), "summary", type: "html", text
+
 server.get '/', (req, res, next) ->
     res.header("Content-Type", "application/xhtml+xml")
-    dom = null
+    doc = null
     waterfall [
         (cb) -> fetchUrl req.query.feed, cb
         (url, xml, cb) ->
             dom = libxmljs.parseXmlString xml.replace(/^<?[^?]*?>/, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
-            if dom.get '/rss'
-                ops =
-                    getItems: (dom) -> dom.find '//item', {}
-                    getUrl: (node) -> node.get('link').text()
-                    setText: (node, text) -> node.get('description')?.text text
-
-            atom = a: 'http://www.w3.org/2005/Atom'
-            if dom.get '/a:feed', atom
-                ops =
-                    getItems: (dom) -> dom.find '//a:entry', atom
-                    getUrl: (node) -> node.get('a:link', atom).attr('href').value()
-                    setText: (node, text) -> if summary = node.get 'summary'
-                            summary.text text
-                        else
-                            node.addChild new libxmljs.Element node.doc(), "summary", type: "html", text
             dom.get('/*').attr 'xml:base': url.replace /[^\/]*$/, ""
-            items = for node in ops.getItems dom
+            if dom.get '/rss'
+                doc = new RssFeed dom
+            else if r = dom.get '/a:feed', nsAtom
+                doc = new AtomFeed dom
+
+            items = for node in doc.getItems()
                 {
-                    ops: ops
-                    url: ops.getUrl node
-                    dom: node
+                    url: doc.getUrl node
+                    node
                 }
             map items, (item, cb) ->
                 fetchUrlWithCache item.url, (err, redirect, content) ->
@@ -139,12 +144,11 @@ server.get '/', (req, res, next) ->
                     if req.query.ignore
                         wanted.find(req.query.ignore).remove()
                     wanted.html()
-                item.ops.setText item.dom, elements.join(' ').replace /[<>&]/g, (char) -> switch char
+                doc.setText item.node, elements.join(' ').replace /[<>&]/g, (char) -> switch char
                     when "<" then "&lt;"
                     when ">" then "&gt;"
                     when "&" then "&amp;"
-            res.send dom.toString()
-            # res.send (jquery(req.query.path, a.content).html() for a in pages).join '\n'
+            res.send doc.dom.toString()
     ], (err) -> if err
         res.send inspect err
 
