@@ -1,6 +1,6 @@
 #!/usr/bin/env coffee
 
-async = {waterfall, map} = require 'async'
+async = {waterfall, map, mapSeries} = require 'async'
 express = require 'express'
 get = require 'get'
 http = require 'http'
@@ -47,19 +47,25 @@ fetchUrl = (url, cb) ->
 
             cb null, url, data.toString 'utf8'
 
-fetchUrlWithCache = (url, cb) -> waterfall [
+fetchUrlWithCache = (url, tag, cb) -> waterfall [
     (cb) -> db.execute 'SELECT b FROM mapping WHERE a = ?', [url], cb
     (rows, cb) ->
         url_red = if rows and rows.length > 0 then rows[0].b else url
-        db.execute 'SELECT content FROM content WHERE url = ?', [url_red], (err, rows) ->
+        db.execute 'SELECT cache_tag, content FROM content WHERE url = ?', [url_red], (err, rows) ->
             cb err, url_red, rows
-    (url_red, rows, cb2) -> if rows and rows.length > 0
-        cb null, url_red, rows[0].content
-    else
+    (url_red, rows, cb2) -> 
+        if rows and rows.length > 0
+            if rows[0].cache_tag == tag
+                cb null, url_red, rows[0].content
+                return
+
+            db.execute 'DELETE from content WHERE url = ?', [url_red], (err, rows) -> cb2 err
+        cb2 null
+    (cb) ->
         puts "GET #{url}"
-        fetchUrl url, cb2
+        fetchUrl url, cb
     (url_red, content, cb) ->
-        db.execute 'INSERT INTO content (url, content) VALUES (?, ?)', [url_red, content], (err) ->
+        db.execute 'INSERT INTO content (url, cache_tag, content) VALUES (?, ?, ?)', [url_red, tag, content], (err) ->
             cb err, url_red, content
     (url_red, content) ->
         if url_red != url
@@ -81,6 +87,7 @@ class RssFeed
 class RssItem
     constructor: (@node) ->
         @url = node.get('link').text()
+        @date = node.get('pubDate').text()
     text: (text) -> @node.get('description')?.text text
 
 nsAtom = a: 'http://www.w3.org/2005/Atom'
@@ -91,6 +98,7 @@ class AtomFeed
 class AtomItem
     constructor: (@node) ->
         @url = node.get('a:link', nsAtom).attr('href').value()
+        @date = node.get('a:updated', nsAtom).text()
     text: (text) -> if summary = @node.get 'summary'
             summary.text text
         else
@@ -110,14 +118,14 @@ server.get '/', (req, res, next) ->
                 doc = new AtomFeed dom
 
             items = doc.items()
-            map items, (item, cb) ->
-                fetchUrlWithCache item.url, (err, redirect, content) ->
+            mapSeries items, (item, cb) ->
+                fetchUrlWithCache item.url, item.date, (err, redirect, content) ->
                     item.redirect = redirect
                     item.content = content
                     cb err, item
             , cb
         (items, cb) ->
-            map items, (item, cb) ->
+            mapSeries items, (item, cb) ->
                 parsed = jquery item.content
                 unless req.query.pagination
                     item.contents = [parsed]
@@ -133,7 +141,7 @@ server.get '/', (req, res, next) ->
                 pages = _.without pages, item.url, item.redirect
 
                 map pages, (page, cb) ->
-                    fetchUrlWithCache page, (err, redirect, content) -> cb err, content 
+                    fetchUrlWithCache page, item.date, (err, redirect, content) -> cb err, content 
                 , (err, contents) ->
                     if err
                         cb err
